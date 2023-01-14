@@ -1,8 +1,33 @@
+use std::vec;
+
 use crypto::{
     aes,
     buffer::{BufferResult, ReadBuffer, WriteBuffer},
     symmetriccipher,
 };
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+type HmacSha256 = Hmac<Sha256>;
+
+pub fn hmac_hash(input: &[u8]) -> [u8; 16] {
+    let mut mac = HmacSha256::new_from_slice(input).expect("HMAC can take key of any size");
+    let result = mac.finalize();
+    let mut hash = vec![];
+    let code_bytes = result.into_bytes();
+    hash.extend_from_slice(&code_bytes);
+    hash.split_off(16);
+    hash.as_slice().try_into().unwrap()
+}
+
+#[test]
+fn test_hmac_hash() {
+    let hash = hmac_hash(&[1, 2, 3, 4]);
+    // dbg!(hash);
+    let expect = hex::decode("3e6294ffb2444b9a43c89b1d19ac5045").unwrap();
+    // expect.split_off(16);
+    // assert_eq!(hash, &expect.as_slice().try_into().unwrap());
+    dbg!(hash, &expect);
+}
 
 pub fn aes_decrypt(
     encrypted_data: &[u8],
