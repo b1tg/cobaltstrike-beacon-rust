@@ -201,16 +201,16 @@ fn main() {
                     let reply_type = 0u32;
                     let raw_pkg = [
                         &counter.to_be_bytes()[..],
-                        &(output.len() + 4).to_be_bytes()[..],
+                        &(output.len() as u32 + 4).to_be_bytes()[..],
                         &reply_type.to_be_bytes()[..],
                         &output.as_bytes(),
                     ]
                     .concat();
                     let raw_pkg_encrypted =
                         aes_encrypt(&raw_pkg.as_slice(), &beacon.aes_key, iv).unwrap();
-                    let hash = hmac_hash(raw_pkg_encrypted.as_slice());
+                    let hash = hmac_hash(&beacon.hmac_key, raw_pkg_encrypted.as_slice());
                     let buf = [
-                        &(raw_pkg_encrypted.len() + 16).to_be_bytes()[..],
+                        &(raw_pkg_encrypted.len() as u32 + 16).to_be_bytes()[..],
                         raw_pkg_encrypted.as_slice(),
                         &hash[..],
                     ]
@@ -236,6 +236,40 @@ fn main() {
         }
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
+}
+
+#[test]
+fn test_reply_pkg() {
+    let result = reply_pkg(b"ABC");
+    let expect = [
+        0, 0, 0, 32, 218, 50, 53, 247, 185, 189, 208, 157, 205, 96, 140, 30, 214, 72, 253, 213, 1,
+        229, 205, 140, 39, 57, 163, 175, 72, 244, 5, 131, 124, 15, 32, 229,
+    ];
+    assert_eq!(result, expect);
+}
+
+fn reply_pkg(data: &[u8]) -> Vec<u8> {
+    let iv = b"abcdefghijklmnop";
+    let aes_key = b"abcdefghijklmnop";
+    let hmac_key = b"";
+    let counter = 1u32;
+    let reply_type = 0u32;
+    let raw_pkg = [
+        &counter.to_be_bytes()[..],
+        &(data.len() as u32 + 4).to_be_bytes()[..],
+        &reply_type.to_be_bytes()[..],
+        &data,
+    ]
+    .concat();
+    let raw_pkg_encrypted = aes_encrypt(&raw_pkg.as_slice(), aes_key, iv).unwrap();
+    let hash = hmac_hash(hmac_key, raw_pkg_encrypted.as_slice());
+    let buf = [
+        &(raw_pkg_encrypted.len() as u32 + 16).to_be_bytes()[..],
+        raw_pkg_encrypted.as_slice(),
+        &hash[..],
+    ]
+    .concat();
+    return buf;
 }
 
 fn rdtsc() -> u64 {
