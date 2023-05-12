@@ -13,7 +13,22 @@ pub fn os_system(cmd_line: &str) -> Result<String> {
     for arg in &cmd_line_split[1..] {
         command.arg(arg);
     }
-    Ok(String::from_utf8(command.output().unwrap().stdout).unwrap())
+    // throw error when app not found
+    let output = command.output()?;
+    let stdout = String::from_utf8(output.stdout);
+    Ok(stdout?)
+}
+pub fn os_system_anyway(cmd_line: &str) -> String {
+    let res = os_system(cmd_line);
+    if res.is_err() {
+        return format!("{:?}", res.err().unwrap());
+    }
+    return res.unwrap();
+}
+
+#[test]
+fn test_os_system() {
+    assert_eq!("program not found", os_system_anyway(&"whoami1"));
 }
 
 pub fn win_os_system(cmd_line: &str) -> Result<String> {

