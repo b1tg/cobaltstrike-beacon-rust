@@ -76,7 +76,6 @@ dependencies = [
  "base64 0.13.1",
  "byteorder",
  "bytes",
- "encoding_rs",
  "hex",
  "hexdump",
  "hmac",

