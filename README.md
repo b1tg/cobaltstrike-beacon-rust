@@ -2,7 +2,7 @@
 
 1. generate config
 
-change C2_URL, USER_AGENT, BEACON_KEYS_PATH in generate_config.py
+change C2_GET_URL, C2_POST_URL, USER_AGENT, BEACON_KEYS_PATH in generate_config.py
 
 ```
 $ pip3 install javaobj-py3

